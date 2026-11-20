@@ -61,9 +61,19 @@ sfm:
   guided_matching: true
   min_track_len: 3
   max_reproj_error: 2.0
+  # Future-proof checkpointing & speed gates:
+  resume: false                         # Reuse intact database.db if interrupted
+  snapshot_freq: 25                     # Incremental mapper checkpoint frequency (0 disables)
+  global_mapper_timeout_s: 900          # Max seconds for global_mapper (0 = unlimited)
+  early_accept_min_reg: 0.95            # Skip slow incremental_mapper when global_mapper achieves >=95%
+  early_accept_max_reproj: 1.2          # ...and mean reprojection error <= 1.2 px across all sources
+  force_both_mappers: false
   # Optional: path to an existing sparse_enu/0 folder to lock a wide scan onto a core scan
   reference_sparse: ""
   sim3_inlier_thresh: 2.0
+
+monitoring:
+  stall_warn_s: 180                     # Alert threshold in progress.json when paired with 0 CPU delta
 
 openmvs:
   openmvs_bin: ""                       # Directory containing InterfaceCOLMAP, DensifyPointCloud, ReconstructMesh

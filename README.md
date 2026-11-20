@@ -103,6 +103,33 @@ python pipeline/04_audit_cloud.py \
   --out ./work/eval
 ```
 
+---
+
+## Live Progress Monitoring, Checkpoints & Stall Detection
+
+Long multi-hundred-image SfM/MVS runs no longer buffer silently until exit:
+
+1. **Unbuffered Streaming Logs + Atomic `progress.json`:**
+   - Stage 2 (`pipeline/02_run_sfm.py`) streams COLMAP stderr live (`--log_target stderr` on COLMAP 4.x, `GLOG_logtostderr=1` on 3.x) into `work/sfm/logs/*.log` and updates `work/progress.json` atomically (`stage`, `step`, `current`, `total`, `pct`, `elapsed_s`, `eta_s`, `pid`, `snapshot_count`, `last_message`).
+   - Stage 3 (`pipeline/03_run_openmvs.py`) tails OpenMVS native `DensifyPointCloud-*.log` / `ReconstructMesh-*.log` files in real time across both `-w <undistorted>` and `cwd`, emitting exact depth-map `%` and Delaunay meshing phase `%`.
+2. **Watch Live Progress From Any Terminal:**
+   ```bash
+   # Continuous terminal dashboard with live ETA, RAM/CPU telemetry & stall check:
+   python pipeline/watch_progress.py --workdir ./work
+
+   # Single machine-readable JSON snapshot (great for scripts, cron, or CI):
+   python pipeline/watch_progress.py --workdir ./work --once --json --cpu-sample 2.0
+
+   # Ad-hoc inspection on an existing directory without progress.json:
+   python pipeline/watch_progress.py --scan-dir ./work --once
+   ```
+3. **Understanding COLMAP's Rhythmic CPU Waves vs. Real Stalls:**
+   - During `incremental_mapper`, seeing alternating **low-CPU periods** (single-threaded PnP + triangulation) and **high-CPU bursts** (all-core Ceres Global Bundle Adjustment) alongside rising RAM is completely normal.
+   - `watch_progress.py` never raises a false `STALL_WARNING` during silent Bundle Adjustment bursts: it checks BOTH `progress.json` timestamp age **and** live process CPU-time delta (`dCPU`), only alerting when `age > stall_seconds` AND CPU time stops advancing.
+4. **Periodic Checkpoints & Early-Accept Speed Gate:**
+   - Incremental mapping writes checkpoints every 25 registered images (`--snapshot-freq 25`, automatically mapping `--Mapper.snapshot_frames_freq` on COLMAP 4.x vs `--Mapper.snapshot_images_freq` on COLMAP 3.x), and `--resume` reuses intact `database.db` SIFT features/matches.
+   - By default, `02_run_sfm.py` evaluates `global_mapper` first and **skips the slower redundant `incremental_mapper`** whenever `global_mapper` registers `>= 95%` of images (`--early-accept-min-reg 0.95`), achieves `<= 1.2 px` reprojection error (`--early-accept-max-reproj 1.2`), and connects every capture source (`--force-both-mappers` overrides this).
+
 ### Export `.pcloud` & Launch Local Viewer
 
 ```bash
