@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#090D16">
+  <title>Drone 3D Point Cloud Viewer</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+
+  <script>
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      if (params.get('embed') === '1') {
+        document.documentElement.setAttribute('data-embed', '1');
+      }
+    })();
+  </script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
+</head>
+<body>
+
+  <div id="toastBanner" class="toast-banner" role="status" aria-live="polite"></div>
+
+  <header class="top-bar glass-panel" role="banner">
+    <div class="brand-badge">
+      <span class="brand-dot" aria-hidden="true"></span>
+      <div class="header-summary">
+        <h1 id="headerTitle" class="header-title">Drone 3D Point Cloud</h1>
+        <p id="headerSubtitle" class="header-subtitle">Georeferenced ENU Photogrammetry</p>
+      </div>
+    </div>
+
+    <div id="headerMetrics" class="header-metrics" aria-label="Point cloud statistics">
+      <div class="metric-pill">
+        <span class="metric-val" id="metricPoints">—</span>
+        <span class="metric-label">3D Points</span>
+      </div>
+      <div class="metric-pill">
+        <span class="metric-val" id="metricSize">—</span>
+        <span class="metric-label">Gzip Stream</span>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <a id="btnFullscreen" class="fullscreen-link" href="./" target="_blank" rel="noopener" title="Open viewer in fullscreen">
+        <span aria-hidden="true">⛶</span>
+        <span>Fullscreen</span>
+      </a>
+
+      <button type="button" id="btnThemeToggle" class="icon-btn" aria-pressed="false" title="Toggle Sunlight / Dark Studio theme">
+        <span aria-hidden="true">☀️</span>
+      </button>
+
+      <button type="button" id="btnCompassReset" class="compass-btn" aria-label="Align North up" title="Click to align North up">
+        <div class="compass-dial" id="compassDial">
+          <span class="compass-n">N</span>
+          <span class="compass-s">S</span>
+          <div class="compass-needle">
+            <div class="needle-n"></div>
+            <div class="needle-s"></div>
+          </div>
+        </div>
+      </button>
+    </div>
+  </header>
+
+  <main id="main-content">
+    <div id="webgl-canvas" role="region" aria-label="Interactive 3D drone point cloud"></div>
+    <div id="markersContainer" aria-label="3D geographic points of interest"></div>
+  </main>
+
+  <div class="status-hud">
+    <div id="streamPill" class="stream-pill glass-panel">
+      <span class="stream-spinner" aria-hidden="true"></span>
+      <span id="streamText">Loading manifest…</span>
+    </div>
+
+    <div id="measureHud" class="measure-hud glass-panel" aria-live="polite">
+      <div class="measure-hud-head">
+        <span>📏 Direct 3D Measure</span>
+        <button type="button" id="btnMeasureClear" class="btn-mini">Clear</button>
+      </div>
+      <div id="measureHint" class="measure-hint">Click 2 points on the cloud…</div>
+      <div class="measure-values">
+        <div class="measure-cell">
+          <span>3D Dist.</span>
+          <strong id="valDist3d">—</strong>
+        </div>
+        <div class="measure-cell">
+          <span>Horiz. ΔXY</span>
+          <strong id="valDistXY">—</strong>
+        </div>
+        <div class="measure-cell">
+          <span>Elev. ΔZ</span>
+          <strong id="valDistZ">—</strong>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section id="controlsSheet" class="sheet-panel glass-panel" role="dialog" aria-labelledby="controlsTitle" aria-modal="false">
+    <div class="sheet-header">
+      <h2 id="controlsTitle">Layers, Shading &amp; 3D Clipping</h2>
+      <button type="button" id="closeControlsBtn" class="sheet-close-btn" aria-label="Close panel">✕</button>
+    </div>
+    <div class="sheet-body">
+
+      <div class="section-group">
+        <div class="section-title">
+          <span>Quality / GPU Budget</span>
+          <strong id="budgetLabel">Standard</strong>
+        </div>
+        <div class="segmented-grid" id="qualityGroup">
+          <button type="button" class="seg-btn" data-quality="eco">Eco Mobile</button>
+          <button type="button" class="seg-btn active" data-quality="standard">Standard</button>
+          <button type="button" class="seg-btn" data-quality="ultra">Ultra HD</button>
+        </div>
+      </div>
+
+      <div class="section-group">
+        <div class="section-title">
+          <span>Color Mode</span>
+        </div>
+        <div class="segmented-grid" id="colorModeGroup">
+          <button type="button" class="seg-btn active" data-colormode="0">Real RGB</button>
+          <button type="button" class="seg-btn" data-colormode="1">DSM Turbo</button>
+          <button type="button" class="seg-btn" data-colormode="2">Hybrid</button>
+        </div>
+      </div>
+
+      <div class="section-group">
+        <div class="slider-row">
+          <div class="slider-meta">
+            <label for="pointSizeSlider">Point Size</label>
+            <strong id="pointSizeVal">2.6 px</strong>
+          </div>
+          <input type="range" id="pointSizeSlider" class="range-slider" min="1.0" max="6.0" step="0.2" value="2.6">
+        </div>
+      </div>
+
+      <div class="section-group">
+        <div class="section-title">
+          <span>Dynamic ENU Clipping (m)</span>
+          <button type="button" id="btnResetClip" class="btn-mini">Reset</button>
+        </div>
+        <div class="slider-row">
+          <div class="slider-meta">
+            <label for="clipZMax">Z Ceiling Max</label>
+            <strong id="clipZMaxVal">Auto</strong>
+          </div>
+          <input type="range" id="clipZMax" class="range-slider" min="-50" max="100" step="0.5" value="100">
+        </div>
+        <div class="slider-row">
+          <div class="slider-meta">
+            <label for="clipXMin">East-West X min / max</label>
+            <strong id="clipXVal">Auto</strong>
+          </div>
+          <input type="range" id="clipXMin" class="range-slider" min="-200" max="200" step="1" value="-200">
+          <input type="range" id="clipXMax" class="range-slider" min="-200" max="200" step="1" value="200">
+        </div>
+        <div class="slider-row">
+          <div class="slider-meta">
+            <label for="clipYMin">North-South Y min / max</label>
+            <strong id="clipYVal">Auto</strong>
+          </div>
+          <input type="range" id="clipYMin" class="range-slider" min="-200" max="200" step="1" value="-200">
+          <input type="range" id="clipYMax" class="range-slider" min="-200" max="200" step="1" value="200">
+        </div>
+      </div>
+
+      <div class="section-group">
+        <div class="section-title"><span>3D Layers</span></div>
+        <div id="layerToggles" class="toggle-list">
+          <label class="toggle-row" id="rowTrajToggle">
+            <span>🛸 GPS Flight Trajectories</span>
+            <input type="checkbox" id="toggleTraj" class="sr-only-input" checked>
+            <span class="toggle-switch" aria-hidden="true"></span>
+          </label>
+          <label class="toggle-row" id="rowPoisToggle">
+            <span>📍 POI Markers</span>
+            <input type="checkbox" id="togglePois" class="sr-only-input" checked>
+            <span class="toggle-switch" aria-hidden="true"></span>
+          </label>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <nav class="bottom-dock" aria-label="3D tools and views">
+    <div class="quick-tools-bar glass-panel" role="toolbar">
+      <button type="button" id="btnMeasure" class="tool-pill measure-on" aria-pressed="false" title="Measure 3D distance between two points">
+        <span aria-hidden="true">📏</span>
+        <span>Measure 3D</span>
+      </button>
+      <button type="button" id="btnToggleTrajQuick" class="tool-pill" aria-pressed="true" title="Show/Hide GPS trajectories">
+        <span aria-hidden="true">🛸</span>
+        <span>Flights</span>
+      </button>
+      <button type="button" id="btnTogglePoisQuick" class="tool-pill" aria-pressed="true" title="Show/Hide POI markers">
+        <span aria-hidden="true">📍</span>
+        <span>POIs</span>
+      </button>
+      <button type="button" id="btnOpenControls" class="tool-pill" aria-expanded="false" aria-controls="controlsSheet">
+        <span aria-hidden="true">⚙️</span>
+        <span>Shading &amp; Clip</span>
+      </button>
+    </div>
+
+    <div id="presetsCarousel" class="presets-carousel glass-panel" role="group" aria-label="Camera presets"></div>
+  </nav>
+
+  <script src="app.js"></script>
+</body>
+</html>

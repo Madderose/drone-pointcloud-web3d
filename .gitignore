@@ -1,0 +1,48 @@
+# Python & environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.env
+*.egg-info/
+dist/
+build/
+
+# Pipeline workdirs & large 3D artifacts
+work/
+data_out/
+dataset/
+sfm/
+mvs/
+eval/
+*.ply
+*.las
+*.laz
+*.rrd
+*.mvs
+*.dmap
+*.db
+*.db-shm
+*.db-wal
+*.log
+*.tmp
+
+# Media inputs
+*.mp4
+*.MP4
+*.mov
+*.MOV
+*.srt
+*.SRT
+*.jpg
+*.JPG
+*.jpeg
+*.png
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

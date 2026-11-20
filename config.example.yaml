@@ -1,0 +1,125 @@
+# Example configuration for `pipeline/run_all.py` and `web_exporter/export_pcloud.py`.
+# All paths may be absolute or relative to this config file.
+
+project:
+  name: "Sample Site — Drone 3D"
+  subtitle: "Georeferenced ENU Photogrammetry"
+  workdir: "./work"
+
+enu_origin:
+  # Set mode: "auto" to derive origin from the very first parsed SRT frame / EXIF GPS,
+  # or mode: "manual" to lock multiple scans to a shared WGS84 tangent origin.
+  mode: "auto"
+  lat0: 0.0
+  lon0: 0.0
+  abs_alt_ref: 0.0
+
+inputs:
+  # Video segments: path, optional start/end frame indices, and frame stride.
+  videos:
+    - path: "./media/flight_orbit.mp4"
+      srt: "./media/flight_orbit.srt"   # optional; defaults to <video_stem>.SRT/.srt
+      prefix: "orbit"
+      tag: "orbit"
+      start_frame: 0
+      end_frame: -1                     # -1 = until end of video
+      stride: 10
+    - path: "./media/flight_loop.mp4"
+      prefix: "loop_a"
+      tag: "loop_depart"
+      start_frame: 0
+      end_frame: 660
+      stride: 15
+    - path: "./media/flight_loop.mp4"
+      prefix: "loop_b"
+      tag: "loop_return"
+      start_frame: 2750
+      end_frame: -1
+      stride: 15
+  stills:
+    - "./media/still_001.jpg"
+    - "./media/still_002.jpg"
+
+prepare:
+  width: 2048
+  height: 1152
+  jpeg_quality: 96
+  temporal_window: 12
+  gps_neighbors: 45
+  backlit_laplacian_thresh: 1800.0
+  render_contact_sheet: true
+
+sfm:
+  colmap_bin: "colmap"                  # e.g. "C:/tools/colmap/COLMAP.bat" on Windows
+  camera_model: "OPENCV"
+  single_camera_per_folder: true
+  max_image_size: 2048
+  max_num_features: 8192
+  use_gpu: true
+  estimate_affine_shape: false
+  domain_size_pooling: false
+  guided_matching: true
+  min_track_len: 3
+  max_reproj_error: 2.0
+  # Optional: path to an existing sparse_enu/0 folder to lock a wide scan onto a core scan
+  reference_sparse: ""
+  sim3_inlier_thresh: 2.0
+
+openmvs:
+  openmvs_bin: ""                       # Directory containing InterfaceCOLMAP, DensifyPointCloud, ReconstructMesh
+  max_threads: 16
+  resolution_level: 1
+  number_views: 8
+  number_views_fuse: 4
+  fusion_filter: 2
+  # Crop bounds: "auto" uses percentile clamping, or provide explicit [xmin, ymin, zmin] / [xmax, ymax, zmax]
+  crop_mode: "auto"
+  hard_min: [-200.0, -400.0, -80.0]
+  hard_max: [300.0, 200.0, 80.0]
+  percentile_low: 0.2
+  percentile_high: 99.8
+  mesh_proximity_m: 0.20
+  voxel_size_m: 0.05
+  sor_neighbors: 24
+  sor_std_ratio: 2.0
+  ror_min_points: 8
+  ror_radius_m: 0.35
+  export_mesh: true
+
+audit:
+  cell_size_m: 0.5
+  min_pts_per_cell: 5
+  # Optional planar RMSE ROI [xmin, xmax, ymin, ymax, zmin, zmax]
+  plane_roi: null
+  baseline_ply: ""
+  export_rrd: false
+
+web_export:
+  out_dir: "./viewer/data"
+  layers:
+    - id: "site_preview"
+      label: "Quick Preview"
+      file: "site_preview.pcloud"
+      role: "preview"
+      replaces: "site_hd"
+      ply: "./work/mvs/consolidated_cloud.ply"
+      target_points: 220000
+      voxel_m: 0.25
+    - id: "site_hd"
+      label: "Main Reconstruction (HD)"
+      file: "site_hd.pcloud"
+      role: "primary"
+      ply: "./work/mvs/consolidated_cloud.ply"
+      target_points: 1400000
+      voxel_m: 0.04
+  trajectories:
+    - id: "flight_orbit"
+      label: "Orbit Flight"
+      srt: "./media/flight_orbit.srt"
+      color: "#F59E0B"
+      step_frames: 10
+  pois:
+    - id: "poi_origin"
+      label: "Takeoff Origin"
+      enu: [0.0, 0.0, 0.0]
+      preset: "overview"
